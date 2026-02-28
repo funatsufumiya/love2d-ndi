@@ -2,6 +2,10 @@
 
 NDI Library for Love2D
 
+## TODO
+
+Current implementation is slow. Need much more optimization.
+
 ## License
 
 `ndi.lua` and `main.lua` is released under MIT License.
