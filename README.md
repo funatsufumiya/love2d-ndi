@@ -6,4 +6,4 @@ NDI Library for Love2D
 
 `ndi.lua` and `main.lua` is released under MIT License.
 
-`libndi` related so, dylib, dll are copied from NDI 6 Runtime. So you need to agree the terms of use of NDI Runtime.
+`libndi` related `.so`, `.dylib`, `.dll` are copied from NDI 6 Runtime. So you need to agree the terms of use of NDI Runtime.
