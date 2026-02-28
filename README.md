@@ -2,9 +2,11 @@
 
 NDI Library for Love2D
 
-## TODO
+## Usage (Example)
 
-Current implementation is slow. Need much more optimization.
+```bash
+$ love --console .
+```
 
 ## License
 

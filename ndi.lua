@@ -9,6 +9,7 @@ local function fourcc(a,b,c,d)
     return string.byte(a) + string.byte(b)*256 + string.byte(c)*65536 + string.byte(d)*16777216
 end
 local FOURCC_BGRA = fourcc('B','G','R','A')
+local FOURCC_RGBA = fourcc('R','G','B','A')
 
 ffi.cdef[[
 typedef void* NDIlib_send_instance_t;
@@ -64,13 +65,39 @@ function ndi.init(name)
         return nil, "NDI send_create failed"
     end
     ndi._instance = instance
-    ndi._format = FOURCC_BGRA
+    -- LÖVE ImageData is typically RGBA8 in memory; use RGBA FourCC by default.
+    ndi._format = FOURCC_RGBA
     return true
 end
 
-local function imageDataToBGRA(imageData)
+-- Try to obtain raw pointer from ImageData for fast path. If unavailable,
+-- fall back to per-pixel read (slow).
+local function imageDataToRaw(imageData)
     local w = imageData:getWidth()
     local h = imageData:getHeight()
+    -- Check pixel format first (if available) and warn/fallback if unsupported.
+    local fmt = nil
+    if type(imageData.getFormat) == "function" then
+        fmt = imageData:getFormat()
+        local allowed = { rgba8 = true, normal = true, srgba8 = true }
+        if not allowed[fmt] then
+            print("NDI warning: ImageData format '" .. tostring(fmt) .. "' not supported for fast pointer path; falling back to safe conversion")
+            fmt = nil
+        end
+    else
+        print("NDI warning: ImageData:getFormat() not available; falling back to safe conversion")
+    end
+
+    -- Fast path: only use getPointer when format is known and supported
+    if fmt and type(imageData.getPointer) == "function" then
+        local ok, p = pcall(function() return imageData:getPointer() end)
+        if ok and p then
+            -- Assume pointer points to contiguous RGBA8 bytes with stride w*4
+            return p, w * h * 4, true, w * 4, w, h
+        end
+    end
+
+    -- Fallback: build packed RGBA string (slow)
     local t = {}
     local insert = table.insert
     for y=0,h-1 do
@@ -80,20 +107,19 @@ local function imageDataToBGRA(imageData)
             local G = math.floor(g * 255 + 0.5)
             local B = math.floor(b * 255 + 0.5)
             local A = math.floor(a * 255 + 0.5)
-            insert(t, string.char(B, G, R, A))
+            insert(t, string.char(R, G, B, A))
         end
     end
-    return table.concat(t)
+    local s = table.concat(t)
+    return s, #s, false, w * 4, w, h
 end
 
 function ndi.sendImageData(imageData)
     if not ndi._instance then return nil, "NDI not initialized" end
     local w = imageData:getWidth()
     local h = imageData:getHeight()
-    local raw = imageDataToBGRA(imageData)
-    local len = #raw
-    local buf = ffi.new("uint8_t[?]", len)
-    ffi.copy(buf, raw, len)
+    local raw, len, isptr, stride = imageDataToRaw(imageData)
+    local buf
     local frame = ffi.new("NDIlib_video_frame_v2_t")
     frame.xres = w
     frame.yres = h
@@ -103,8 +129,16 @@ function ndi.sendImageData(imageData)
     frame.picture_aspect_ratio = w / h
     frame.frame_format_type = 0
     frame.timecode = 0
-    frame.p_data = buf
-    frame.line_stride_in_bytes = w * 4
+    if isptr then
+        -- raw is a pointer/lightuserdata; cast to uint8_t*
+        frame.p_data = ffi.cast("uint8_t*", raw)
+        frame.line_stride_in_bytes = stride
+    else
+        buf = ffi.new("uint8_t[?]", len)
+        ffi.copy(buf, raw, len)
+        frame.p_data = buf
+        frame.line_stride_in_bytes = w * 4
+    end
     frame.p_metadata = nil
     frame.timestamp = 0
     C.NDIlib_send_send_video_v2(ndi._instance, frame)

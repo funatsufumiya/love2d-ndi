@@ -27,7 +27,6 @@ function love.update(dt)
     love.graphics.circle("fill", 400 + math.sin(t*2)*50, 200, 40)
     love.graphics.setCanvas()
 
-    -- send current canvas to NDI (may be slow for large canvases)
     ok, err = ndi.sendCanvas(canvas)
     -- if not ok then
     --     -- optional: print once
