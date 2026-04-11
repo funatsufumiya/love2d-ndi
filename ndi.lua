@@ -145,12 +145,17 @@ function ndi.sendImageData(imageData)
     return true
 end
 
+local cached_image_data = nil
+
 function ndi.sendCanvas(canvas)
     if type(canvas.newImageData) ~= "function" then
         return nil, "canvas:newImageData() not available on this object"
     end
+
     local img = canvas:newImageData()
-    return ndi.sendImageData(img)
+    local b = ndi.sendImageData(img)
+    img:release()
+    return b
 end
 
 function ndi.getSourceName()
